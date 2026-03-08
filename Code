@@ -1,0 +1,78 @@
+# ==========================================================
+# Project: Chicago Socioeconomic & Hardship Analysis
+# Process: Evolution from Linear to Generalized Additive Models (GAM)
+# Neighborhoods: 77 Chicago Community Areas
+# Goal: 35-Day Technical Mastery Plan (Day 3 Complete)
+# ==========================================================
+
+# 1. LOAD LIBRARIES
+# -----------------
+library(tidyverse)
+library(mgcv) # Essential for s() and gam() functions
+
+# 2. DATA INGESTION
+# -----------------
+# Downloading Public Health Statistics from the Chicago Data Portal
+data_url <- "https://data.cityofchicago.org/api/views/kn9c-c2s2/rows.csv?accessType=DOWNLOAD"
+raw_socio <- read_csv(data_url)
+
+# 3. DATA CLEANING & TRANSFORMATION
+# ---------------------------------
+# Renaming columns and cleaning for all 77 community areas
+housing_analysis <- raw_socio %>%
+  select(
+    neighborhood = `COMMUNITY AREA NAME`,
+    hardship = `HARDSHIP INDEX`,
+    poverty = `PERCENT HOUSEHOLDS BELOW POVERTY`,
+    income = `PER CAPITA INCOME`,
+    crowding = `PERCENT OF HOUSING CROWDED`
+  ) %>%
+  distinct() %>% # Remove duplicates
+  drop_na()     # Ensure 77 rows remain
+
+# 4. THE EVOLUTION: WHY WE MOVED TO GAMs
+# --------------------------------------
+
+# A. Linear Regression (The Baseline)
+# Assumption Check: Assumes income/hardship relationship is a straight line.
+model_linear <- lm(hardship ~ income, data = housing_analysis)
+summary(model_linear)$r.sq # Explains ~92.8% but violates assumptions.
+
+# B. Polynomial Regression (The "Stiff" Curve)
+# Assumption Check: Forces a U-shape, but it's not flexible enough.
+model_poly <- lm(hardship ~ income + I(income^2), data = housing_analysis)
+summary(model_poly)$adj.r.squared # ~95%, but still misses local patterns.
+
+# C. The GAM Baseline (Initial Wiggle)
+# Here we switched to s() to let the data dictate the curve.
+model_gam_v1 <- gam(hardship ~ s(income, k=3), data = housing_analysis)
+# Check: We found a Low p-value in gam.check(), meaning k=3 was "too stiff".
+
+# 5. THE MASTER MODEL (The Optimized "Team-up")
+# --------------------------------------------
+# Using k=10 for Income to capture complex tipping points
+# Using k=3 for Poverty because its relationship is simpler/linear
+model_both_final <- gam(hardship ~ s(income, k=10) + s(poverty, k=3), 
+                        data = housing_analysis)
+
+# 6. RESULTS & DIAGNOSTICS
+# ------------------------
+
+# The "Performance Review"
+# Result: Adjusted R-squared = 0.968 (97% accuracy!)
+summary(model_both_final)
+
+# The "Health Check" (Validating Assumptions)
+# We want LARGE p-values (>0.05) here to show we have enough "wiggle room".
+gam.check(model_both_final)
+
+# 7. FINAL VISUALIZATION
+# ----------------------
+# Plotting the smooth terms to see the "Story" of the data
+plot(model_both_final, 
+     pages = 1, 
+     residuals = TRUE, 
+     shade = TRUE, 
+     pch = 1, 
+     col = "blue",
+     main = "The Impact of Income & Poverty on Chicago Hardship")
